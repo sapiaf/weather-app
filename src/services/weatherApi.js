@@ -88,6 +88,74 @@ export async function fetchWeather(lat, lon) {
 }
 
 /**
+ * Reverse geocoding: ottiene il nome della città da lat/lon.
+ *
+ * @param {number} lat - Latitudine
+ * @param {number} lon - Longitudine
+ * @returns {Promise<{ name: string, country: string }>}
+ * @throws {Error} Se il reverse geocoding fallisce
+ */
+export async function reverseGeocode(lat, lon) {
+  const url = `${GEO_BASE}/reverse?latitude=${lat}&longitude=${lon}`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Errore reverse geocoding (HTTP ${res.status}). Riprova più tardi.`);
+  }
+
+  const data = await res.json();
+
+  // Validazione risposta
+  if (!data.results || data.results.length === 0) {
+    throw new Error("Posizione non trovata. Prova a cercare manualmente.");
+  }
+
+  const { name, country } = data.results[0];
+  return { name, country };
+}
+
+/**
+ * Recupera i dati di previsione per i prossimi giorni.
+ *
+ * @param {number} lat
+ * @param {number} lon
+ * @param {number} days - Numero di giorni (default 7)
+ * @returns {Promise<{ daily: object, hourly: object }>} Dati previsione giornalieri e orari
+ * @throws {Error} Se la risposta non è valida
+ */
+export async function fetchForecast(lat, lon, days = 7) {
+  const params = new URLSearchParams({
+    latitude: lat,
+    longitude: lon,
+    daily: "temperature_2m_max,temperature_2m_min,weathercode",
+    hourly: "temperature_2m,weathercode",
+    forecast_days: days,
+    timezone: "auto",
+    temperature_unit: "celsius",
+  });
+
+  const url = `${WEATHER_BASE}/forecast?${params}`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Errore previsione (HTTP ${res.status}). Riprova più tardi.`);
+  }
+
+  const data = await res.json();
+
+  // Validazione struttura risposta
+  if (!data.daily || !data.hourly) {
+    throw new Error("Risposta API non valida: dati previsione mancanti.");
+  }
+
+  return {
+    daily: data.daily,
+    hourly: data.hourly,
+    fetchedAt: Date.now(),
+  };
+}
+
+/**
  * Entry point combinato: geocoding → forecast.
  * Restituisce un oggetto normalizzato pronto per la UI.
  *

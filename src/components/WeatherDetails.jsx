@@ -4,16 +4,26 @@
  */
 
 import { windDirection } from "../utils/weatherCodes";
+import { convertTemp, convertSpeed, formatTemp, formatSpeed } from "../utils/units";
 
 /**
- * @param {{ data: import('../hooks/useWeather').WeatherResult }} props
+ * @param {{ data: import('../hooks/useWeather').WeatherResult, units: { temperature: string, speed: string } }} props
  */
-export default function WeatherDetails({ data }) {
+export default function WeatherDetails({ data, units }) {
+  const tempUnit = units?.temperature ?? 'C';
+  const speedUnit = units?.speed ?? 'kmh';
+
+  const displayFeelsLike = data.feelsLike != null
+    ? formatTemp(convertTemp(data.feelsLike, tempUnit), tempUnit)
+    : "—";
+
+  const displayWind = formatSpeed(convertSpeed(data.windspeed, speedUnit), speedUnit);
+
   const items = [
     {
       icon: "🌡️",
       label: "Percepita",
-      value: data.feelsLike != null ? `${Math.round(data.feelsLike)}°C` : "—",
+      value: displayFeelsLike,
     },
     {
       icon: "💧",
@@ -23,7 +33,7 @@ export default function WeatherDetails({ data }) {
     {
       icon: "💨",
       label: "Vento",
-      value: `${Math.round(data.windspeed)} km/h ${windDirection(data.winddirection)}`,
+      value: `${displayWind} ${windDirection(data.winddirection)}`,
     },
     {
       icon: "🌂",

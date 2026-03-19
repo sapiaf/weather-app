@@ -1,19 +1,28 @@
 /**
  * SearchBar.jsx
- * Input di ricerca con bottone e submit da tastiera (Enter).
+ * Input di ricerca con bottone, submit da tastiera (Enter) e geolocalizzazione.
  */
 
 import { useState } from "react";
 
 /**
- * @param {{ onSearch: (city: string) => void, loading: boolean }} props
+ * @param {{
+ *   onSearch: (city: string) => void,
+ *   loading: boolean,
+ *   onGeolocation?: () => void,
+ *   geoLoading?: boolean
+ * }} props
  */
-export default function SearchBar({ onSearch, loading }) {
+export default function SearchBar({ onSearch, loading, onGeolocation, geoLoading }) {
   const [value, setValue] = useState("");
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (value.trim()) onSearch(value);
+  };
+
+  const handleGeoClick = () => {
+    if (onGeolocation) onGeolocation();
   };
 
   return (
@@ -30,6 +39,15 @@ export default function SearchBar({ onSearch, loading }) {
         autoComplete="off"
         spellCheck="false"
       />
+      <button
+        onClick={handleGeoClick}
+        disabled={loading || geoLoading}
+        aria-label="Usa la mia posizione"
+        className="geo-button"
+        title="Usa la mia posizione"
+      >
+        {geoLoading ? <span className="spinner" /> : "📍"}
+      </button>
       <button
         onClick={handleSubmit}
         disabled={loading || !value.trim()}
