@@ -11,7 +11,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { getWeatherInfo, windDirection }  from "../utils/weatherCodes";
-import { geocodeCity, fetchWeather }      from "../services/weatherApi";
+import { geocodeCity, fetchWeather, reverseGeocode, getWeatherByCoords } from "../services/weatherApi";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TEST 1 — weatherCodes: getWeatherInfo
@@ -116,5 +116,115 @@ describe("fetchWeather", () => {
       json: async () => ({}), // risposta senza current_weather
     });
     await expect(fetchWeather(45, 9)).rejects.toThrow("Risposta API non valida");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEST 5 — reverseGeocode: Nominatim mock
+// ─────────────────────────────────────────────────────────────────────────────
+describe("reverseGeocode", () => {
+  beforeEach(() => { vi.stubGlobal("fetch", vi.fn()); });
+  afterEach(()  => { vi.restoreAllMocks(); });
+
+  it("restituisce nome città da risposta Nominatim valida (town)", async () => {
+    fetch.mockResolvedValueOnce({
+      ok:   true,
+      json: async () => ({
+        address: { town: "Rho", country: "Italia" },
+      }),
+    });
+    const result = await reverseGeocode(45.53, 9.04);
+    expect(result.name).toBe("Rho");
+    expect(result.country).toBe("Italia");
+  });
+
+  it("usa city se presente, prima di town", async () => {
+    fetch.mockResolvedValueOnce({
+      ok:   true,
+      json: async () => ({
+        address: { city: "Milano", town: "Rho", country: "Italia" },
+      }),
+    });
+    const result = await reverseGeocode(45.46, 9.19);
+    expect(result.name).toBe("Milano");
+  });
+
+  it("fallback a 'Posizione attuale' se nessun campo nome è presente", async () => {
+    fetch.mockResolvedValueOnce({
+      ok:   true,
+      json: async () => ({
+        address: { country: "Italia" },
+      }),
+    });
+    const result = await reverseGeocode(45.0, 9.0);
+    expect(result.name).toBe("Posizione attuale");
+  });
+
+  it("lancia un errore se address è assente", async () => {
+    fetch.mockResolvedValueOnce({
+      ok:   true,
+      json: async () => ({}),
+    });
+    await expect(reverseGeocode(45.0, 9.0)).rejects.toThrow(
+      "Posizione non trovata"
+    );
+  });
+
+  it("lancia un errore HTTP quando la risposta non è ok", async () => {
+    fetch.mockResolvedValueOnce({ ok: false, status: 404 });
+    await expect(reverseGeocode(45.0, 9.0)).rejects.toThrow(
+      "Errore reverse geocoding (HTTP 404)"
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEST 6 — getWeatherByCoords: integrazione mock
+// ─────────────────────────────────────────────────────────────────────────────
+describe("getWeatherByCoords", () => {
+  beforeEach(() => { vi.stubGlobal("fetch", vi.fn()); });
+  afterEach(()  => { vi.restoreAllMocks(); });
+
+  it("restituisce un oggetto meteo normalizzato con città da Nominatim", async () => {
+    const nowIso = new Date().toISOString().slice(0, 13);
+
+    // Prima chiamata: fetchWeather (Open-Meteo)
+    fetch.mockResolvedValueOnce({
+      ok:   true,
+      json: async () => ({
+        current_weather: {
+          temperature: 18,
+          weathercode: 2,
+          windspeed: 12,
+          winddirection: 270,
+        },
+        hourly: {
+          time:                     [`${nowIso}:00`],
+          apparent_temperature:     [16],
+          relativehumidity_2m:      [65],
+          precipitation_probability:[20],
+          windspeed_10m:            [12],
+          winddirection_10m:        [270],
+          uv_index:                 [3],
+        },
+      }),
+    });
+
+    // Seconda chiamata: reverseGeocode (Nominatim)
+    fetch.mockResolvedValueOnce({
+      ok:   true,
+      json: async () => ({
+        address: { city: "Milano", country: "Italia" },
+      }),
+    });
+
+    const result = await getWeatherByCoords(45.46, 9.19);
+
+    expect(result.city).toBe("Milano");
+    expect(result.country).toBe("Italia");
+    expect(result.temperature).toBe(18);
+    expect(result.lat).toBe(45.46);
+    expect(result.lon).toBe(9.19);
+    expect(result.humidity).toBe(65);
   });
 });

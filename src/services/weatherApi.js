@@ -89,6 +89,7 @@ export async function fetchWeather(lat, lon) {
 
 /**
  * Reverse geocoding: ottiene il nome della città da lat/lon.
+ * Usa Nominatim (OpenStreetMap) — endpoint: /nominatim/reverse (proxy Vite).
  *
  * @param {number} lat - Latitudine
  * @param {number} lon - Longitudine
@@ -96,21 +97,35 @@ export async function fetchWeather(lat, lon) {
  * @throws {Error} Se il reverse geocoding fallisce
  */
 export async function reverseGeocode(lat, lon) {
-  const url = `${GEO_BASE}/reverse?latitude=${lat}&longitude=${lon}`;
+  // Chiamata diretta a Nominatim (funziona sia in locale che in produzione)
+  const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1`;
 
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: {
+      // Nominatim richiede un User-Agent identificativo per policy d'uso
+      'User-Agent': 'WeatherApp/1.0 (https://github.com/tuo-username/weather-app)',
+    },
+  });
   if (!res.ok) {
     throw new Error(`Errore reverse geocoding (HTTP ${res.status}). Riprova più tardi.`);
   }
 
   const data = await res.json();
 
-  // Validazione risposta
-  if (!data.results || data.results.length === 0) {
+  // Nominatim restituisce { address: { city, town, village, county, country } }
+  if (!data.address) {
     throw new Error("Posizione non trovata. Prova a cercare manualmente.");
   }
 
-  const { name, country } = data.results[0];
+  const name =
+    data.address.city    ||
+    data.address.town    ||
+    data.address.village ||
+    data.address.county  ||
+    "Posizione attuale";
+
+  const country = data.address.country ?? "";
+
   return { name, country };
 }
 
@@ -156,6 +171,46 @@ export async function fetchForecast(lat, lon, days = 7) {
 }
 
 /**
+ * Entry point per geolocalizzazione: lat/lon → meteo + nome città.
+ * Bypassa geocodeCity (evita ambiguità sui nomi) usando direttamente le coordinate.
+ *
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {Promise<import('../hooks/useWeather').WeatherResult>}
+ */
+export async function getWeatherByCoords(lat, lon) {
+  // Fetch meteo e reverse geocoding in parallelo
+  const [weather, geo] = await Promise.all([
+    fetchWeather(lat, lon),
+    reverseGeocode(lat, lon),
+  ]);
+
+  // Trova l'indice orario corretto usando hourly.time (fuso orario della città)
+  const nowIso  = new Date().toISOString().slice(0, 13); // "2024-03-20T14"
+  const hourIdx = weather.hourly.time?.findIndex(t => t.startsWith(nowIso)) ?? 0;
+  const h       = weather.hourly;
+
+  return {
+    city:    geo.name,
+    country: geo.country,
+    lat,
+    lon,
+
+    temperature:       weather.current_weather.temperature,
+    weathercode:       weather.current_weather.weathercode,
+    windspeed:         weather.current_weather.windspeed,
+    winddirection:     weather.current_weather.winddirection,
+
+    feelsLike:         h.apparent_temperature?.[hourIdx],
+    humidity:          h.relativehumidity_2m?.[hourIdx],
+    precipProbability: h.precipitation_probability?.[hourIdx],
+    uvIndex:           h.uv_index?.[hourIdx],
+
+    fetchedAt: Date.now(),
+  };
+}
+
+/**
  * Entry point combinato: geocoding → forecast.
  * Restituisce un oggetto normalizzato pronto per la UI.
  *
@@ -166,9 +221,9 @@ export async function getWeatherByCity(cityName) {
   const geo     = await geocodeCity(cityName);
   const weather = await fetchWeather(geo.lat, geo.lon);
 
-  // Prendiamo l'indice orario più vicino all'ora corrente
-  const now     = new Date();
-  const hourIdx = now.getHours(); // open-meteo restituisce 24 slot orari
+  // Trova l'indice orario corretto usando hourly.time (fuso orario della città)
+  const nowIso  = new Date().toISOString().slice(0, 13); // "2024-03-20T14"
+  const hourIdx = weather.hourly.time?.findIndex(t => t.startsWith(nowIso)) ?? 0;
 
   const h = weather.hourly;
 

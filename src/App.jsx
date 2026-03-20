@@ -12,44 +12,23 @@ import { useWeather } from "./hooks/useWeather";
 import { useGeolocation } from "./hooks/useGeolocation";
 import { useUnits }   from "./hooks/useUnits";
 import { useTheme } from "./hooks/useTheme";
-import { reverseGeocode } from "./services/weatherApi";
 import { useEffect } from "react";
 
 import "./App.css";
 
 export default function App() {
-  const { data, loading, error, history, search, fromCache } = useWeather();
+  const { data, loading, error, history, search, searchByCoords, fromCache } = useWeather();
   const { coords, loading: geoLoading, error: geoError, requestLocation } = useGeolocation();
   const { units, toggleTempUnit, toggleSpeedUnit } = useUnits();
   const { theme, toggleTheme } = useTheme();
 
 
-  // Quando otteniamo le coordinate, facciamo il reverse geocoding e cerchiamo
-  useEffect(() => {
-    if (geoError) {
-      // L'errore di geolocalizzazione viene gestito qui
-      // ma non interrompiamo l'app, mostriamo solo un log
-      console.warn("Geolocalizzazione error:", geoError);
-    }
-  }, [geoError]);
-
-  // Handle geolocation button click
-  const handleGeolocation = async () => {
-    requestLocation();
-  };
-
-  // Effetto per gestire le coordinate ottenute
+  // Quando otteniamo le coordinate, fetch meteo direttamente (bypassa geocoding)
   useEffect(() => {
     if (coords) {
-      reverseGeocode(coords.latitude, coords.longitude)
-        .then(({ name }) => {
-          search(name);
-        })
-        .catch(() => {
-          // Errore silenzioso
-        });
+      searchByCoords(coords.latitude, coords.longitude);
     }
-  }, [coords, search]);
+  }, [coords, searchByCoords]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark-mode", theme === "dark");
@@ -91,7 +70,7 @@ export default function App() {
         <SearchBar
           onSearch={search}
           loading={loading}
-          onGeolocation={handleGeolocation}
+          onGeolocation={requestLocation}
           geoLoading={geoLoading}
         />
 

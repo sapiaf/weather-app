@@ -27,7 +27,11 @@ export default function SearchBar({ onSearch, loading, onGeolocation, geoLoading
 
   return (
     <div className="search-bar">
+      <label htmlFor="city-search" className="sr-only">
+        Cerca una città
+      </label>
       <input
+        id="city-search"
         type="text"
         value={value}
         onChange={e => setValue(e.target.value)}

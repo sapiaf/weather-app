@@ -6,7 +6,7 @@
  * @module useGeolocation
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 
 /**
  * @typedef {Object} GeolocationCoords
@@ -25,6 +25,7 @@ import { useState, useCallback } from "react";
 /**
  * Hook che wrappa navigator.geolocation.getCurrentPosition().
  * Gestisce stati di loading, errori (incluso permission denied) e coordinate.
+ * Previene richieste parallele tramite un ref di guard.
  *
  * @returns {GeolocationState}
  */
@@ -33,6 +34,9 @@ export function useGeolocation() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Guard: evita che doppi click lancino richieste GPS parallele
+  const isRequestingRef = useRef(false);
+
   const requestLocation = useCallback(() => {
     // Controlla se il browser supporta la geolocation
     if (!navigator.geolocation) {
@@ -40,6 +44,10 @@ export function useGeolocation() {
       return;
     }
 
+    // Guard: se c'è già una richiesta in corso, non avviarne un'altra
+    if (isRequestingRef.current) return;
+
+    isRequestingRef.current = true;
     setLoading(true);
     setError(null);
     setCoords(null);
@@ -52,6 +60,7 @@ export function useGeolocation() {
           longitude: position.coords.longitude,
         });
         setLoading(false);
+        isRequestingRef.current = false;
       },
       // Error callback
       (err) => {
@@ -71,6 +80,7 @@ export function useGeolocation() {
         }
         setError(message);
         setLoading(false);
+        isRequestingRef.current = false;
       },
       // Options
       {

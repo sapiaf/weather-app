@@ -9,7 +9,7 @@
  */
 
 import { useState, useCallback } from "react";
-import { getWeatherByCity } from "../services/weatherApi";
+import { getWeatherByCity, getWeatherByCoords } from "../services/weatherApi";
 
 /** TTL cache in millisecondi (10 minuti) */
 const CACHE_TTL_MS  = 10 * 60 * 1000;
@@ -146,5 +146,23 @@ export function useWeather() {
     }
   }, []);
 
-  return { data, loading, error, history, search, fromCache };
+  const searchByCoords = useCallback(async (lat, lon) => {
+    setLoading(true);
+    setError(null);
+    setFromCache(false);
+
+    try {
+      const result = await getWeatherByCoords(lat, lon);
+      setCache(result);
+      setData(result);
+      // Non aggiungiamo alle history: la posizione GPS non è una città cercata
+    } catch (err) {
+      setError(err.message ?? "Errore sconosciuto. Riprova.");
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { data, loading, error, history, search, searchByCoords, fromCache };
 }
